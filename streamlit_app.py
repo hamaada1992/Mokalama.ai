@@ -14,7 +14,8 @@ st.title("🎧 تحليل مكالمات الدعم الفني وتحليل ال
 
 # تحميل نموذج Whisper
 @st.cache_resource
-def load_whisper_model():     return WhisperModel("turbo", device="cpu")
+def load_whisper_model():     return WhisperModel("tiny", device="cpu")
+", device="cpu")
 
 whisper_model = load_whisper_model()
 
