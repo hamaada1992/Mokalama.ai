@@ -12,7 +12,7 @@ st.title("🎧 تحليل مكالمات الدعم الفني وتحليل ال
 
 @st.cache_resource
 def load_whisper_model():
-    return WhisperModel("medium", device="cpu")
+    return WhisperModel("base", device="cpu")
 
 whisper_model = load_whisper_model()
 
