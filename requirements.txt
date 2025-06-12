@@ -1,0 +1,5 @@
+streamlit
+transformers
+pandas
+plotly
+faster-whisper
