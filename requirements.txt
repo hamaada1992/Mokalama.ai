@@ -1,9 +1,9 @@
 streamlit==1.45.1
 faster-whisper==1.1.1
-transformers==4.38.2
-torch==2.7.1
+transformers==4.52.4
+torch==2.1.2 --extra-index-url https://download.pytorch.org/whl/cpu
 pandas==2.3.0
 plotly==6.1.2
-scipy
-protobuf
-sentencepiece
+pyarrow==20.0.0
+altair==5.5.0
+scipy==1.11.4
