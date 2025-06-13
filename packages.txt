@@ -1,3 +1,6 @@
 ffmpeg
 libsm6
 libxext6
+pkg-config
+cmake
+build-essential  # يحتوي على أدوات الترجمة مثل gcc, g++, make
