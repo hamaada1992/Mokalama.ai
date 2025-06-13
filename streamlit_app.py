@@ -4,15 +4,15 @@ import tempfile
 import pandas as pd
 import plotly.express as px
 import json
-from faster_whisper import WhisperModel
+import whisper
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
 st.set_page_config(page_title="تحليل مكالمات الدعم", layout="wide")
-st.title("🎧 تحليل مكالمات الدعم الفني وتحليل المشاعر")
+st.title("🎧 تحليل مكالمات الدعم الفني بدقة عالية")
 
 @st.cache_resource
 def load_whisper_model():
-    return WhisperModel("base", device="cpu")
+    return whisper.load_model("base")
 
 whisper_model = load_whisper_model()
 
@@ -26,9 +26,15 @@ def load_sentiment_model():
 sentiment_pipeline = load_sentiment_model()
 
 corrections = {
-    "الفتور": "الفاتورة", "زياد": "زيادة", "الليزوم": "اللزوم",
-    "المصادة": "المساعدة", "بدي بطل": "بدي أبدل", "مع بول": "مع بوليصة",
-    "تازي": "تازة", "ادام الفني": "أداء الفني"
+    "الفتور": "الفاتورة", "زياد": "زيادة", "الليزوم": "اللزوم", "المصادة": "المساعدة",
+    "بدي بطل": "بدي أبدل", "مع بول": "مع بوليصة", "تازي": "تازة", "ادام الفني": "أداء الفني",
+    "اخذ وقت اكثر من اللّعظم": "أخذ وقت أكثر من اللازم", "اللعظم": "اللازم", "مش زي ما مكتوب": "مش زي ما هو مكتوب",
+    "بأفين": "بقى فين", "فين": "أين", "واللسه": "ولسه", "تجربتي معاكم كانت متس": "تجربتي معاكم كانت ممتازة",
+    "هكررها": "سأكررها", "تانيا": "ثانية", "ينفعاد": "ينفع أعدّل", "ينفع اد": "ينفع أعدّل", "أبل": "قبل",
+    "ما حده": "ما حدا", "لخبر هك": "الخبر هيك", "بسير": "بصير", "يعتيكم": "يعطيكم", "عافي": "العافية",
+    "تأخر واجد": "تأخر كثير", "واجد": "كثير", "ضروري": "بشكل عاجل",
+    "لو سمحت متى بيكون التوصيل للرياض بالعادة": "متى يوصل الطلب للرياض عادة؟",
+    "يوماين": "يومين", "ما تبكون": "ما تكونون", "عضروري": "ضروري"
 }
 
 def clean_text(text):
@@ -42,13 +48,13 @@ def manual_correction(text):
     return text
 
 def transcribe_audio(path):
-    segments, _ = whisper_model.transcribe(path)
-    return " ".join([seg.text for seg in segments])
+    result = whisper_model.transcribe(path, language="ar")
+    return result["text"]
 
 uploaded_files = st.file_uploader("📂 ارفع ملفات صوتية", type=["wav", "mp3", "flac"], accept_multiple_files=True)
 
 if uploaded_files:
-    st.info("🔄 جاري التحليل...")
+    st.info("🔄 جاري المعالجة...")
     results = []
 
     for uploaded_file in uploaded_files:
@@ -60,7 +66,16 @@ if uploaded_files:
         raw = transcribe_audio(tmp_path)
         clean = clean_text(raw)
         corrected = manual_correction(clean)
-        sentiment = sentiment_pipeline(corrected)[0]
+
+        try:
+            if corrected.strip() == "" or len(corrected.split()) < 3:
+                sentiment = {"label": "neutral", "score": 0.5}
+            else:
+                sentiment = sentiment_pipeline(corrected)[0]
+        except Exception:
+            sentiment = {"label": "neutral", "score": 0.5}
+            st.warning(f"⚠️ تعذر تحليل الجملة: {corrected}")
+
         label = sentiment["label"]
         score = round(sentiment["score"], 2)
         rank = "High" if label == "negative" and score > 0.8 else "Medium" if label == "negative" else "Low"
@@ -81,11 +96,9 @@ if uploaded_files:
 
     col1, col2 = st.columns(2)
     with col1:
-        fig1 = px.pie(df, names="sentiment_label", title="توزيع المشاعر")
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(px.pie(df, names="sentiment_label", title="توزيع المشاعر"), use_container_width=True)
     with col2:
-        fig2 = px.bar(df, x="rank", color="rank", title="تصنيف المكالمات")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(px.bar(df, x="rank", color="rank", title="تصنيف المكالمات"), use_container_width=True)
 
     st.subheader("⬇️ تحميل النتائج")
     st.download_button("📥 JSON", json.dumps(results, ensure_ascii=False, indent=2), file_name="call_results.json", mime="application/json")
