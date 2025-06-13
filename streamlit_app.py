@@ -98,7 +98,7 @@ corrections = {
     "العنوان": "عنوان",
     "ميت": "ما يت"
 }
-}
+
 
 def clean_text(text):
     import re
