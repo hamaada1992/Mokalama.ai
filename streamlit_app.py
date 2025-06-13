@@ -92,7 +92,7 @@ if uploaded_files:
 
     df = pd.DataFrame(results)
     
-    # التطويرات الجديدة: فلتر وتلوين الجدول
+    # التطويرات الجديدة: فلتر وتلوين الجدول مع تحسين قابلية القراءة
     st.subheader("📋 النتائج")
     
     # فلتر حسب المشاعر
@@ -107,28 +107,24 @@ if uploaded_files:
     else:
         filtered_df = df.copy()
     
-    # تلوين الصفوف حسب المشاعر
+    # تلوين الصفوف حسب المشاعر مع ضمان قابلية القراءة
     def color_sentiment(row):
+        styles = ["color: black"] * len(row)  # جعل جميع النصوص سوداء لضمان الوضوح
+        
         if row["sentiment_label"] == "negative":
-            return ["background-color: #ffcccc"] * len(row)
+            styles = [f"{s}; background-color: #ffcccc" for s in styles]
         elif row["sentiment_label"] == "positive":
-            return ["background-color: #ccffcc"] * len(row)
+            styles = [f"{s}; background-color: #ccffcc" for s in styles]
         else:
-            return ["background-color: #ffffcc"] * len(row)  # اللون الأصفر للمشاعر المحايدة
+            styles = [f"{s}; background-color: #ffffcc" for s in styles]  # اللون الأصفر للمشاعر المحايدة
+        
+        return styles
     
     # عرض الجدول مع التلوين
-    st.dataframe(
-        filtered_df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank"]]
-        .style.apply(color_sentiment, axis=1),
-        use_container_width=True
-    )
+    styled_df = filtered_df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank"]] \
+        .style.apply(color_sentiment, axis=1) \
+        .set_properties(**{'text-align': 'right'})  # محاذاة النص لليمين للغة العربية
+    
+    st.dataframe(styled_df, use_container_width=True)
 
     col1, col2 = st.columns(2)
-    with col1:
-        st.plotly_chart(px.pie(df, names="sentiment_label", title="توزيع المشاعر"), use_container_width=True)
-    with col2:
-        st.plotly_chart(px.bar(df, x="rank", color="rank", title="تصنيف المكالمات"), use_container_width=True)
-
-    st.subheader("⬇️ تحميل النتائج")
-    st.download_button("📥 JSON", json.dumps(results, ensure_ascii=False, indent=2), file_name="call_results.json", mime="application/json")
-    st.download_button("📥 CSV", df.to_csv(index=False).encode("utf-8-sig"), file_name="call_results.csv", mime="text/csv")
