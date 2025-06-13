@@ -1,8 +1,7 @@
 streamlit==1.31.1
 faster-whisper==1.0.1
 transformers==4.36.2
-torch==2.5.0
-sentencepiece
-scipy
-pandas
-plotly
+torch==2.1.2
+sentencepiece==0.1.99
+pandas==2.1.4
+plotly==5.18.0
