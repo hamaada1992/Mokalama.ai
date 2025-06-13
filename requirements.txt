@@ -1,10 +1,10 @@
-streamlit
-pandas
-plotly
+streamlit==1.34.0
+pandas==2.2.2
+plotly==5.22.0
 transformers==4.30.2
 tokenizers==0.15.1
 torch==2.2.2
-sentencepiece
+sentencepiece==0.2.0
 faster-whisper==0.10.1
-ffmpeg-python
-protobuf
+ffmpeg-python==0.2.0
+protobuf==4.25.3
