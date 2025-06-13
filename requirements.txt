@@ -1,8 +1,9 @@
 streamlit==1.45.1
 faster-whisper==1.1.1
-transformers==4.52.4
-torch==2.3.0
-sentence-transformers==2.7.0
-plotly==6.1.2
-pandas==2.3.0
-scikit-learn==1.4.2
+transformers==4.38.2
+torch==2.2.2
+sentencepiece
+plotly
+pandas
+scikit-learn
+arabert
