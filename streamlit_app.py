@@ -8,15 +8,17 @@ from faster_whisper import WhisperModel
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import gc
+import re
 
 st.set_page_config(page_title="تحليل مكالمات الدعم", layout="wide")
-st.title("🎧 تحليل مكالمات الدعم الفني بدقة عالية")
+st.title("🎧 تحليل مكالمات الدعم الفني بدقة وسرعة")
 
 @st.cache_resource
 def load_whisper_model():
     try:
-        model = WhisperModel("base", device="cpu", compute_type="float32")
-        st.success("✅ تم تحميل نموذج Whisper بنجاح")
+        # استخدام نموذج أصغر لتسريع المعالجة
+        model = WhisperModel("tiny", device="cpu", compute_type="float32")
+        st.success("✅ تم تحميل نموذج Whisper (tiny) بنجاح")
         return model
     except Exception as e:
         st.error(f"❌ فشل في تحميل نموذج Whisper: {str(e)}")
@@ -45,33 +47,30 @@ def clear_memory():
     gc.collect()
 
 corrections = {
-    # أخطاء إملائية ولهجات
     "الفتور": "الفاتورة", "زياد": "زيادة", "الليزوم": "اللزوم", "المصادة": "المساعدة",
     "بدي بطل": "بدي أبدل", "مع بول": "مع بوليصة", "تازي": "تازة", "ادام الفني": "أداء الفني",
-    "اخذ وقت اكثر من اللّعظم": "أخذ وقت أكثر من اللازم", "اللعظم": "اللازم",
-    "مش زي ما مكتوب": "مش زي ما هو مكتوب", "بأفين": "بقى فين", "فين": "أين",
-    "واللسه": "ولسه", "تجربتي معاكم كانت متس": "تجربتي معاكم كانت ممتازة",
-    "هكررها": "سأكررها", "تانيا": "ثانية", "ينفعاد": "ينفع أعدّل", "ينفع اد": "ينفع أعدّل",
-    "أبل": "قبل", "ما حده": "ما حدا", "لخبر هك": "الخبر هيك", "بسير": "بصير",
-    "يعتيكم": "يعطيكم", "عافي": "العافية", "تأخر واجد": "تأخر كثير", "واجد": "كثير",
-    "ضروري": "بشكل عاجل", "يوماين": "يومين", "ما تبكون": "ما تكونون", "عضروري": "ضروري",
-    "ميت شهر": "ما يتشحن", "تأبل": "تقبل", "الضفع": "الدفع", "بيقال": "باي بال",
-    "المواضف": "الموظف", "مهدب": "مهذب", "العلان": "الإعلان", "شنل": "شنو",
-    "طوب": "معطوب", "أبريبا": "أبغي", "ديل": "بديل", "اد": "أعدّل", "العنوان": "عنوان", "ميت": "ما يت",
-    # لهجات مصرية
-    "عايز": "أريد", "هينفع": "ينفع", "كده": "هكذا", "زي": "مثل", "جداً": "جدا",
-    "اتأخرت": "تأخرت", "هروح": "سأذهب",
-    # لهجات خليجية
-    "وش": "ما", "زود": "زيادة", "أبغى": "أريد", "معطوب": "تالف", "طلبية": "طلب", "مافي": "لا يوجد",
-    # لهجات شامية
+    "عايز": "أريد", "هينفع": "ينفع", "كده": "هكذا", "زي": "مثل", "اتأخرت": "تأخرت",
+    "وش": "ما", "أبغى": "أريد", "معطوب": "تالف", "طلبية": "طلب", "مافي": "لا يوجد",
     "بدي": "أريد", "كتير": "كثير", "ما بصير": "لا يجوز", "ردلي": "رد علي", "هيك": "هكذا",
     "عنجد": "حقًا", "لساتني": "ما زلت"
 }
 
+topics_keywords = {
+    "الدفع": ["دفع", "فاتورة", "بيبال", "بطاقة", "تحويل"],
+    "الشحن": ["شحن", "توصيل", "موعد", "وصل", "تأخر", "استلام"],
+    "الاسترجاع": ["استرجاع", "إرجاع", "بديل", "مكسور", "تبديل"],
+    "الجودة": ["جودة", "تالف", "معطوب", "سيئ", "ممتاز", "كسور"],
+    "العروض": ["عرض", "عروض", "خصم", "تخفيض", "سعر خاص"],
+    "الدعم الفني": ["دعم", "فني", "مساعدة", "مشاكل", "الموظف", "خدمة"],
+    "العنوان": ["عنوان", "موقع", "الرياض", "تعديل", "منطقتي"]
+}
+
+def detect_topic(text):
+    scores = {topic: sum(text.count(k) for k in keys) for topic, keys in topics_keywords.items()}
+    return max(scores, key=scores.get) if max(scores.values()) > 0 else "غير معروف"
+
 def clean_text(text):
-    import re
-    text = re.sub(r"[^\u0600-\u06FF\s]", "", text)
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", re.sub(r"[^\u0600-\u06FF\s]", "", text)).strip()
 
 def manual_correction(text):
     for wrong, right in corrections.items():
@@ -80,7 +79,7 @@ def manual_correction(text):
 
 def transcribe_audio(path):
     try:
-        segments, _ = whisper_model.transcribe(path)
+        segments, _ = whisper_model.transcribe(path, beam_size=1)
         return " ".join([seg.text for seg in segments])
     except Exception as e:
         st.error(f"❌ خطأ في تحويل الصوت إلى نص: {str(e)}")
@@ -89,10 +88,10 @@ def transcribe_audio(path):
 uploaded_files = st.file_uploader("📂 ارفع ملفات صوتية", type=["wav", "mp3", "flac"], accept_multiple_files=True)
 
 if uploaded_files and whisper_model and sentiment_pipeline:
-    st.info("🔄 جاري المعالجة...")
+    st.info("🔄 جاري المعالجة... الرجاء الانتظار")
     results = []
 
-    with st.spinner("⏳ جاري معالجة الملفات..."):
+    with st.spinner("⏳ يتم تحويل وتحليل المكالمات..."):
         for uploaded_file in uploaded_files:
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
@@ -103,15 +102,14 @@ if uploaded_files and whisper_model and sentiment_pipeline:
                 raw = transcribe_audio(tmp_path)
                 clean = clean_text(raw)
                 corrected = manual_correction(clean)
+                topic = detect_topic(corrected)
 
-                try:
-                    if corrected.strip() == "" or len(corrected.split()) < 3:
-                        sentiment = {"label": "neutral", "score": 0.5}
-                    else:
+                sentiment = {"label": "neutral", "score": 0.5}
+                if len(corrected.split()) >= 3:
+                    try:
                         sentiment = sentiment_pipeline(corrected)[0]
-                except Exception as e:
-                    sentiment = {"label": "neutral", "score": 0.5}
-                    st.warning(f"⚠️ تعذر تحليل الجملة: {corrected} - {str(e)}")
+                    except Exception as e:
+                        st.warning(f"⚠️ تعذر تحليل الجملة: {corrected}")
 
                 label = sentiment["label"]
                 score = round(sentiment["score"], 2)
@@ -124,14 +122,14 @@ if uploaded_files and whisper_model and sentiment_pipeline:
                     "text_corrected": corrected,
                     "sentiment_label": label,
                     "sentiment_score": score,
-                    "rank": rank
+                    "rank": rank,
+                    "topic": topic
                 })
 
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
+                os.unlink(tmp_path)
 
             except Exception as e:
-                st.error(f"❌ خطأ في معالجة الملف {uploaded_file.name}: {str(e)}")
+                st.error(f"❌ خطأ في ملف {uploaded_file.name}: {str(e)}")
 
     if not results:
         st.error("❌ لم يتم إنتاج أي نتائج")
@@ -140,37 +138,32 @@ if uploaded_files and whisper_model and sentiment_pipeline:
     df = pd.DataFrame(results)
     st.subheader("📋 النتائج")
 
-    sentiment_filter = st.multiselect("تصفية حسب المشاعر", options=["positive", "negative", "neutral"], default=["positive", "negative", "neutral"])
-    filtered_df = df[df["sentiment_label"].isin(sentiment_filter)] if sentiment_filter else df.copy()
+    sentiment_filter = st.multiselect("تصفية حسب المشاعر", ["positive", "negative", "neutral"], default=["positive", "negative", "neutral"])
+    filtered_df = df[df["sentiment_label"].isin(sentiment_filter)] if sentiment_filter else df
 
     def color_sentiment(row):
-        styles = ["color: black; text-align: right"] * len(row)
+        base = "color: black; text-align: right"
         if row["sentiment_label"] == "negative":
-            styles = [f"{s}; background-color: #ffcccc" for s in styles]
+            return [f"{base}; background-color: #ffcccc"] * len(row)
         elif row["sentiment_label"] == "positive":
-            styles = [f"{s}; background-color: #ccffcc" for s in styles]
+            return [f"{base}; background-color: #ccffcc"] * len(row)
         else:
-            styles = [f"{s}; background-color: #ffffcc" for s in styles]
-        return styles
+            return [f"{base}; background-color: #ffffcc"] * len(row)
 
-    if not filtered_df.empty:
-        styled_df = filtered_df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank"]].style.apply(color_sentiment, axis=1)
-        st.dataframe(styled_df, use_container_width=True)
-    else:
-        st.warning("⚠️ لا توجد نتائج تطابق عوامل التصفية")
+    st.dataframe(
+        filtered_df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank", "topic"]].style.apply(color_sentiment, axis=1),
+        use_container_width=True
+    )
 
     col1, col2 = st.columns(2)
     with col1:
-        if not df.empty:
-            st.plotly_chart(px.pie(df, names="sentiment_label", title="توزيع المشاعر"), use_container_width=True)
+        st.plotly_chart(px.pie(df, names="sentiment_label", title="توزيع المشاعر"), use_container_width=True)
     with col2:
-        if not df.empty:
-            st.plotly_chart(px.bar(df, x="rank", color="rank", title="تصنيف المكالمات"), use_container_width=True)
+        st.plotly_chart(px.histogram(df, x="topic", title="توزيع المواضيع"), use_container_width=True)
 
-    st.subheader("⬇️ تحميل النتائج")
-    st.download_button("📥 JSON", json.dumps(results, ensure_ascii=False, indent=2), file_name="call_results.json", mime="application/json")
-    st.download_button("📥 CSV", df.to_csv(index=False).encode("utf-8-sig"), file_name="call_results.csv", mime="text/csv")
+    st.download_button("📥 تحميل JSON", json.dumps(results, ensure_ascii=False, indent=2), file_name="call_results.json", mime="application/json")
+    st.download_button("📥 تحميل CSV", df.to_csv(index=False).encode("utf-8-sig"), file_name="call_results.csv", mime="text/csv")
 
     clear_memory()
 else:
-    st.error("❌ لم يتم تحميل النماذج بنجاح، يرجى تحديث الصفحة والمحاولة مجددًا")
+    st.warning("🚫 يرجى رفع ملفات صوتية وتحميل النماذج لإظهار النتائج.")
