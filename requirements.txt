@@ -1,9 +1,22 @@
-streamlit==1.45.1
-pandas
-plotly
-transformers==4.39.3
-torch==2.2.2
-faster-whisper==1.1.1
-sentencepiece
-accelerate
-scipy
+# واجهة المستخدم
+streamlit==1.35.0
+plotly==5.22.0
+
+# تحويل الصوت إلى نص (Whisper)
+faster-whisper==0.10.0
+
+# تحليل المشاعر ومواضيع المكالمة
+transformers==4.41.2
+sentencepiece==0.2.0
+torch==2.3.0
+
+# أدوات إضافية
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+
+# تحسين الأداء في بيئة CPU
+accelerate==0.31.0
+
+# لدعم التحميل والتنسيقات
+huggingface-hub==0.23.0
