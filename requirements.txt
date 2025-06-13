@@ -1,9 +1,6 @@
 streamlit
-torch
-faster-whisper
 transformers
-plotly
 pandas
-nltk
-sentencepiece
-protobuf
+plotly
+faster-whisper
+torch
