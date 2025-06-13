@@ -22,7 +22,7 @@ st.title("🎧 تحليل مكالمات الدعم الفني بدقة عالي
 @st.cache_resource
 def load_whisper_model():
     try:
-        model = WhisperModel("base", device="cpu", compute_type="float32")
+        model = WhisperModel("tiny", device="cpu", compute_type="float32")
         st.success("✅ تم تحميل نموذج Whisper بنجاح")
         return model
     except Exception as e:
