@@ -1,8 +1,7 @@
-streamlit==1.35.0
-plotly==5.22.0
-pandas==2.3.0
-transformers==4.37.2
-tokenizers==0.19.1
-sentencepiece==0.2.0
-torch==2.5.0
+streamlit==1.31.1
 faster-whisper==1.0.1
+transformers==4.36.2
+torch==2.1.2
+sentencepiece==0.1.99
+pandas==2.1.4
+plotly==5.18.0
