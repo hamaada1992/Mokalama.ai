@@ -3,8 +3,6 @@ pandas==2.2.2
 plotly==5.22.0
 transformers==4.30.2
 tokenizers==0.15.1
-torch==2.2.2
 sentencepiece==0.2.0
 faster-whisper==0.10.1
 ffmpeg-python==0.2.0
-protobuf==4.25.3
