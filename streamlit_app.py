@@ -7,6 +7,7 @@ import json
 from faster_whisper import WhisperModel
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import torch
+import gc
 
 # إصلاح مشكلة torch.classes
 try:
@@ -45,13 +46,12 @@ def load_sentiment_model():
 
 sentiment_pipeline = load_sentiment_model()
 
-# إدارة الذاكرة
+# إدارة الذاكرة المعدلة
 def clear_memory():
-    import gc
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()
-    st.runtime.legacy_caching.clear_cache()
+    # تمت إزالة استدعاء legacy_caching.clear_cache() لأنه لم يعد مدعوماً
 
 corrections = {
     "الفتور": "الفاتورة", "زياد": "زيادة", "الليزوم": "اللزوم", "المصادة": "المساعدة",
