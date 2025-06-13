@@ -1,10 +1,10 @@
 streamlit
 pandas
 plotly
-transformers
-tokenizers
+transformers==4.30.2
+tokenizers==0.15.1
 torch==2.2.2
 sentencepiece
-faster-whisper
+faster-whisper==0.10.1
 ffmpeg-python
 protobuf
