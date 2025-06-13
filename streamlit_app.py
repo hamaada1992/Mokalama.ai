@@ -10,17 +10,14 @@ import torch
 import gc
 import re
 
-# إعداد الصفحة
 st.set_page_config(page_title="تحليل مكالمات الدعم", layout="wide")
 st.title("🎧 تحليل مكالمات الدعم الفني بدقة عالية")
 
-# إدارة الذاكرة
 def clear_memory():
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()
 
-# تحميل نموذج Whisper
 @st.cache_resource
 def load_whisper_model():
     try:
@@ -30,9 +27,6 @@ def load_whisper_model():
         st.error(f"❌ Whisper Model Load Failed: {str(e)}")
         return None
 
-whisper_model = load_whisper_model()
-
-# نموذج تحليل المشاعر
 @st.cache_resource
 def load_sentiment_model():
     try:
@@ -44,7 +38,6 @@ def load_sentiment_model():
         st.warning(f"⚠️ فشل في تحميل نموذج تحليل المشاعر: {e}")
         return None
 
-# نموذج استخراج الموضوع
 @st.cache_resource
 def load_topic_model():
     try:
@@ -53,10 +46,10 @@ def load_topic_model():
         st.warning(f"⚠️ تعذر تحميل نموذج استخراج الموضوع: {e}")
         return None
 
+whisper_model = load_whisper_model()
 sentiment_pipeline = load_sentiment_model()
 topic_pipeline = load_topic_model()
 
-# تصحيحات اللهجات
 corrections = {
     "شنل": "شنو", "أبريبا": "أبغي", "مع بول": "مع بوليصة", "تازي": "تازة",
     "ادام الفني": "أداء الفني", "الفتور": "الفاتورة", "زياد": "زيادة",
@@ -82,13 +75,11 @@ def transcribe_audio(path):
         st.error(f"❌ خطأ تحويل الصوت: {e}")
         return ""
 
-# مواضيع مقترحة للاستخدام في تصنيف الموضوع
 TOPIC_CANDIDATES = [
     "الدفع", "الشحن", "الإرجاع", "المنتج", "السعر", "التوصيل",
     "مشكلة فنية", "طلب مساعدة", "الضمان", "استفسار عام", "خدمة العملاء"
 ]
 
-# تحميل الملفات
 uploaded_files = st.file_uploader("📂 ارفع ملفات صوتية", type=["wav", "mp3", "flac"], accept_multiple_files=True)
 
 if uploaded_files and whisper_model and sentiment_pipeline:
@@ -107,13 +98,11 @@ if uploaded_files and whisper_model and sentiment_pipeline:
                 clean = clean_text(raw)
                 corrected = manual_correction(clean)
 
-                # تحليل المشاعر
                 try:
                     sentiment = sentiment_pipeline(corrected)[0] if len(corrected.split()) >= 3 else {"label": "neutral", "score": 0.5}
                 except:
                     sentiment = {"label": "neutral", "score": 0.5}
 
-                # استخراج الموضوع
                 try:
                     topic = topic_pipeline(corrected, TOPIC_CANDIDATES)
                     best_topic = topic["labels"][0]
@@ -145,18 +134,15 @@ if uploaded_files and whisper_model and sentiment_pipeline:
 
     df = pd.DataFrame(results)
 
-    # جدول النتائج
     st.subheader("📋 النتائج")
     st.dataframe(df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank", "topic"]], use_container_width=True)
 
-    # الرسوم البيانية
     col1, col2 = st.columns(2)
     with col1:
         st.plotly_chart(px.pie(df, names="sentiment_label", title="توزيع المشاعر"), use_container_width=True)
     with col2:
         st.plotly_chart(px.bar(df, x="topic", color="rank", title="تصنيف حسب المواضيع"), use_container_width=True)
 
-    # تحميل البيانات
     st.subheader("⬇️ تحميل النتائج")
     st.download_button("📥 تحميل JSON", json.dumps(results, ensure_ascii=False, indent=2), file_name="call_results.json", mime="application/json")
     st.download_button("📥 تحميل CSV", df.to_csv(index=False).encode("utf-8-sig"), file_name="call_results.csv", mime="text/csv")
@@ -164,6 +150,8 @@ if uploaded_files and whisper_model and sentiment_pipeline:
     clear_memory()
 
 elif not whisper_model:
-    st.error("❌ لم يتم تحميل نموذج تحويل الصوت")
+    st.error("❌ لم يتم تحميل نموذج Whisper")
 elif not sentiment_pipeline:
     st.error("❌ لم يتم تحميل نموذج تحليل المشاعر")
+elif not topic_pipeline:
+    st.error("⚠️ تعذر تحميل نموذج استخراج الموضوع")
