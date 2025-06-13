@@ -129,7 +129,7 @@ with st.sidebar:
 # تخزين النماذج
 @st.cache_resource(show_spinner="جارٍ تحميل نموذج تحويل الصوت إلى نص...")
 def load_whisper_model():
-    return WhisperModel("small", device="cpu", compute_type="int8")
+    return WhisperModel("base", device="cpu", compute_type="int8")
 
 @st.cache_resource(show_spinner="جارٍ تحميل نموذج تحليل المشاعر...")
 def load_sentiment_model():
