@@ -1,9 +1,9 @@
 streamlit==1.35.0
 plotly==5.22.0
 pandas==2.3.0
-transformers==4.41.2
-tokenizers==0.19.1
+transformers==4.40.1
+tokenizers==0.13.3       # متوافق مع faster-whisper
 sentencepiece==0.2.0
-torch==2.5.0
+torch==2.1.2              # أكثر استقرارًا ودعماً لـ CPU
 faster-whisper==0.9.0
 rich==13.7.1
