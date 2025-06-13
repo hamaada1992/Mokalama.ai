@@ -9,6 +9,7 @@ from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassifica
 
 st.set_page_config(page_title="تحليل مكالمات الدعم", layout="wide")
 st.title("🎧 تحليل مكالمات الدعم الفني بدقة عالية")
+
 @st.cache_resource
 def load_whisper_model():
     return WhisperModel("base", device="cpu")
@@ -90,8 +91,37 @@ if uploaded_files:
         })
 
     df = pd.DataFrame(results)
+    
+    # التطويرات الجديدة: فلتر وتلوين الجدول
     st.subheader("📋 النتائج")
-    st.dataframe(df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank"]], use_container_width=True)
+    
+    # فلتر حسب المشاعر
+    sentiment_filter = st.multiselect(
+        "تصفية حسب المشاعر",
+        options=["positive", "negative", "neutral"],
+        default=["positive", "negative", "neutral"]
+    )
+    
+    if sentiment_filter:
+        filtered_df = df[df["sentiment_label"].isin(sentiment_filter)]
+    else:
+        filtered_df = df.copy()
+    
+    # تلوين الصفوف حسب المشاعر
+    def color_sentiment(row):
+        if row["sentiment_label"] == "negative":
+            return ["background-color: #ffcccc"] * len(row)
+        elif row["sentiment_label"] == "positive":
+            return ["background-color: #ccffcc"] * len(row)
+        else:
+            return ["background-color: #ffffcc"] * len(row)  # اللون الأصفر للمشاعر المحايدة
+    
+    # عرض الجدول مع التلوين
+    st.dataframe(
+        filtered_df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank"]]
+        .style.apply(color_sentiment, axis=1),
+        use_container_width=True
+    )
 
     col1, col2 = st.columns(2)
     with col1:
