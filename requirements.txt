@@ -1,22 +1,15 @@
-# واجهة المستخدم
 streamlit==1.35.0
 plotly==5.22.0
 
-# تحويل الصوت إلى نص (Whisper)
-faster-whisper==0.10.0
-
-# تحليل المشاعر ومواضيع المكالمة
+# نسخة متوافقة مع transformers الحديثة
 transformers==4.41.2
+tokenizers==0.19.1  # شرط من transformers
+
+# نسخة متوافقة من faster-whisper لا تعتمد على tokenizers
+faster-whisper==0.9.0  # لا يوجد شرط tokenizers <0.16
+
+torch==2.5.0  # متاح لـ Python 3.13 (إصدار 2.3.0 غير موجود)
 sentencepiece==0.2.0
-torch==2.3.0
 
-# أدوات إضافية
-pandas==2.2.2
-numpy==1.26.4
-scipy==1.13.1
-
-# تحسين الأداء في بيئة CPU
-accelerate==0.31.0
-
-# لدعم التحميل والتنسيقات
-huggingface-hub==0.23.0
+# تحسين قراءة سجل الأخطاء
+rich==14.0.0
