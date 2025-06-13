@@ -1,6 +1,6 @@
-streamlit
+faster-whisper
 transformers
 pandas
 plotly
-faster-whisper
+streamlit
 torch
