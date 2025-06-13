@@ -4,15 +4,14 @@ import tempfile
 import pandas as pd
 import plotly.express as px
 import json
-import whisper
+from faster_whisper import WhisperModel
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
 st.set_page_config(page_title="تحليل مكالمات الدعم", layout="wide")
 st.title("🎧 تحليل مكالمات الدعم الفني بدقة عالية")
-
 @st.cache_resource
 def load_whisper_model():
-    return whisper.load_model("base")
+    return WhisperModel("base", device="cpu")
 
 whisper_model = load_whisper_model()
 
@@ -48,8 +47,8 @@ def manual_correction(text):
     return text
 
 def transcribe_audio(path):
-    result = whisper_model.transcribe(path, language="ar")
-    return result["text"]
+    segments, _ = whisper_model.transcribe(path)
+    return " ".join([seg.text for seg in segments])
 
 uploaded_files = st.file_uploader("📂 ارفع ملفات صوتية", type=["wav", "mp3", "flac"], accept_multiple_files=True)
 
