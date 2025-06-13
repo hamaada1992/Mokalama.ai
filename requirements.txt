@@ -1,9 +1,12 @@
 streamlit==1.45.1
 faster-whisper==1.1.1
-transformers==4.52.4
-torch==2.1.2 --extra-index-url https://download.pytorch.org/whl/cpu
-pandas==2.3.0
-plotly==6.1.2
-pyarrow==20.0.0
-altair==5.5.0
-scipy==1.11.4
+transformers==4.37.2
+torch==2.2.2
+huggingface-hub==0.20.3
+pandas==2.2.2
+plotly==6.0.0
+scipy==1.13.0
+numpy==1.26.4
+soundfile==0.12.1
+sentencepiece==0.1.99
+protobuf==4.25.3
