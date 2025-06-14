@@ -97,7 +97,7 @@ def load_sentiment_model():
 sentiment_pipeline = load_sentiment_model()
 
 # ========== تحسينات القاموس ==========
-corrections = {corrections = {
+corrections = {
     "الفتور": "الفاتورة",
     "زياد": "زيادة",
     "الليزوم": "اللّزوم",
