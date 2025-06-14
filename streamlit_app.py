@@ -1,6 +1,6 @@
 import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Fix for PyTorch threading issues
-os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "poll"  # Fix for file watcher error
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "poll"
 
 import streamlit as st
 import tempfile
@@ -11,14 +11,65 @@ from faster_whisper import WhisperModel
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import time
 import re
+import numpy as np
 
-st.set_page_config(page_title="تحليل مكالمات الدعم", layout="wide")
-st.title("🎧 تحليل مكالمات الدعم الفني وتحليل المشاعر")
+# تحسينات المظهر العام
+st.set_page_config(
+    page_title="تحليل مكالمات الدعم الفني",
+    layout="wide",
+    page_icon="📞",
+    initial_sidebar_state="expanded"
+)
 
-# Model selection
+# تخصيص الألوان
+st.markdown("""
+<style>
+    :root {
+        --primary: #3498db;
+        --secondary: #2ecc71;
+        --danger: #e74c3c;
+        --warning: #f39c12;
+        --dark: #2c3e50;
+    }
+    
+    .st-emotion-cache-1y4p8pa {
+        background-color: #f8f9fa;
+    }
+    
+    .stAlert {
+        border-left: 4px solid var(--danger);
+        border-radius: 4px;
+    }
+    
+    .critical-call {
+        border: 2px solid var(--danger);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+        background-color: #fff8f8;
+    }
+    
+    .header {
+        color: var(--dark);
+        border-bottom: 2px solid var(--primary);
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("📞 تحليل مكالمات الدعم الفني وتحليل المشاعر")
+
+# ========== إعدادات النموذج ==========
 st.sidebar.header("⚙️ إعدادات النموذج")
-model_size = st.sidebar.radio("حجم نموذج الصوت", ["tiny", "base"], index=1, help="اختر tiny لتحليل أسرع أو base لدقة أعلى")
+model_size = st.sidebar.radio(
+    "حجم نموذج الصوت",
+    ["tiny", "base"], 
+    index=1,
+    help="اختر tiny لتحليل أسرع أو base لدقة أعلى"
+)
 
+# ========== تحميل النماذج ==========
 @st.cache_resource(show_spinner=False)
 def load_whisper_model(size):
     st.info(f"⏳ جاري تحميل نموذج الصوت ({size})...")
@@ -45,8 +96,8 @@ def load_sentiment_model():
 
 sentiment_pipeline = load_sentiment_model()
 
-# Enhanced corrections dictionary
-corrections = {
+# ========== تحسينات القاموس ==========
+corrections = {corrections = {
     "الفتور": "الفاتورة",
     "زياد": "زيادة",
     "الليزوم": "اللّزوم",
@@ -62,6 +113,7 @@ corrections = {
     "مع طوب": "معطوب",
     "أبريبا ديل": "أبغى بديل",
     "شنل": "شنو",
+    "شن": "شنو",
     "العلان": "الإعلان",
     "المواضف": "الموظّف",
     "مهدب": "مهذّب",
@@ -70,30 +122,58 @@ corrections = {
     "اللعظم": "اللازم",
     "ينفعد": "ينفع أعدّل",
     "أبل ميت شهل": "قبل ما يتشحن",
+    "أبل ميت شهر": "قبل ما يتشحن",
     "لخبر هك ما بسير": "الخبر هيك ما بصير",
     "يعتيكم": "يعطيكم",
     "عن جد التعامل": "عنجد التعامل",
     "وشحن وصلت": "والشحنة وصلت",
     "ما تابكون": "متى بيكون",
-    "عضروري": "ضروري",
+    "ما تبكون": "متى بيكون",
     "تبكون": "بيكون",
-    "ما تبكون التوصيل": "متى بيكون التوصيل",
+    "عضروري": "ضروري",
     "بدي ألغي طلب رأم واحد لاتي خمس سبعة تسعة": "بدي ألغي طلب رقم ١٣٥٧٩",
     "المنتك": "المنتج",
     "التحفة": "رائع",
     "مأبول": "مقبول",
     "مواعد": "موعد",
     "تأخر واجد": "تأخّر كثير",
-    "شن": "شنو",
     "ها كررها": "هأكرّرها",
     "بدير جعل من تج": "بدي أرجّع المنتج",
     "غيط لب رأم": "ألغي طلب رقم"
 }
 
+# ========== استخراج المواضيع ==========
+TOPIC_KEYWORDS = {
+    "فواتير": ["فاتورة", "دفع", "بايبال", "الدفع", "الفاتورة"],
+    "توصيل": ["توصيل", "شحنة", "وصلت", "توصيل", "التوصيل", "موعد توصيل", "تاريخ توصيل"],
+    "استفسار": ["استفسار", "سؤال", "استعلام"],
+    "شكوى": ["شكوى", "مشكلة", "اعتراض", "خطأ", "غلط"],
+    "خدمة فنية": ["فني", "تقني", "صيانة", "إصلاح"],
+    "بطاقة": ["بطاقة", "كارت", "ائتمان", "مدى"],
+    "تأخير": ["تأخير", "تأخرت", "متأخرة", "تأخر", "أبطأ"],
+    "إلغاء طلب": ["إلغاء", "الغي", "ألغي", "تراجع", "الغاء", "إلغاء طلب"]
+}
+
+def detect_topic(text):
+    if not text:
+        return "غير محدد"
+    
+    text = text.lower()
+    topic_counts = {topic: 0 for topic in TOPIC_KEYWORDS}
+    
+    for topic, keywords in TOPIC_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text:
+                topic_counts[topic] += 1
+                
+    if max(topic_counts.values()) == 0:
+        return "أخرى"
+    
+    return max(topic_counts, key=topic_counts.get)
+
+# ========== وظائف مساعدة ==========
 def clean_text(text):
-    # Remove non-Arabic characters except spaces
     text = re.sub(r"[^\u0600-\u06FF\s]", "", text)
-    # Remove extra spaces
     return re.sub(r"\s+", " ", text).strip()
 
 def manual_correction(text):
@@ -105,22 +185,43 @@ def transcribe_audio(path):
     try:
         segments, _ = whisper_model.transcribe(
             path, 
-            beam_size=3,  # Faster decoding
-            vad_filter=True,  # Remove silence
+            beam_size=3,
+            vad_filter=True,
             language="ar"
         )
-        return " ".join([seg.text for seg in segments])[:5000]  # Limit to 5000 characters
+        return " ".join([seg.text for seg in segments])[:5000]
     except Exception as e:
         st.error(f"❌ خطأ في تحويل الصوت إلى نص: {str(e)}")
         return ""
 
-# File upload section
+# ========== واجهة تحميل الملفات ==========
 uploaded_files = st.file_uploader(
     "📂 ارفع ملفات صوتية (WAV, MP3, FLAC)", 
     type=["wav", "mp3", "flac"], 
     accept_multiple_files=True
 )
 
+# ========== الفلاتر ==========
+if uploaded_files:
+    st.sidebar.header("🔍 تصفية النتائج")
+    
+    # فلترة المشاعر
+    sentiment_options = ["سلبي", "إيجابي", "محايد"]
+    selected_sentiments = st.sidebar.multiselect(
+        "المشاعر",
+        options=sentiment_options,
+        default=sentiment_options
+    )
+    
+    # فلترة الأهمية
+    rank_options = ["عالية جداً", "عالية", "متوسطة", "إيجابية", "محايدة"]
+    selected_ranks = st.sidebar.multiselect(
+        "مستوى الأهمية",
+        options=rank_options,
+        default=rank_options
+    )
+
+# ========== معالجة المكالمات ==========
 if uploaded_files:
     st.info(f"🔄 جاري تحليل {len(uploaded_files)} مكالمة...")
     start_time = time.time()
@@ -129,23 +230,19 @@ if uploaded_files:
     status_text = st.empty()
 
     for i, uploaded_file in enumerate(uploaded_files):
-        # Update progress
         progress_percent = int((i + 1) / len(uploaded_files) * 100)
         progress_bar.progress(progress_percent)
         status_text.text(f"📞 جاري معالجة المكالمة {i+1}/{len(uploaded_files)}: {uploaded_file.name}")
         
         try:
-            # Create temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
                 tmp_file.write(uploaded_file.read())
                 tmp_path = tmp_file.name
             
             call_id = os.path.splitext(uploaded_file.name)[0]
             
-            # Transcription
             raw = transcribe_audio(tmp_path)
             
-            # Skip processing if transcription failed
             if not raw.strip():
                 results.append({
                     "call_id": call_id,
@@ -155,27 +252,24 @@ if uploaded_files:
                     "text_corrected": "",
                     "sentiment_label": "error",
                     "sentiment_score": 0.0,
-                    "rank": "Error"
+                    "rank": "Error",
+                    "topic": "غير محدد"
                 })
                 continue
             
-            # Text processing
             clean = clean_text(raw)
             corrected = manual_correction(clean)
+            topic = detect_topic(corrected)
             
-            # Sentiment analysis (skip if empty)
             if not corrected.strip():
                 sentiment = {"label": "neutral", "score": 0.0}
                 st.warning(f"المكالمة {call_id}: النص فارغ بعد التنظيف")
             else:
-                # Truncate to 512 tokens for model input
                 sentiment = sentiment_pipeline(corrected[:512])[0]
             
-            # Determine rank
             label = sentiment["label"]
             score = round(sentiment["score"], 2)
             
-            # Enhanced ranking system
             if label == "negative":
                 if score > 0.85:
                     rank = "عالية جداً"
@@ -195,7 +289,8 @@ if uploaded_files:
                 "text_corrected": corrected,
                 "sentiment_label": label,
                 "sentiment_score": score,
-                "rank": rank
+                "rank": rank,
+                "topic": topic
             })
             
         except Exception as e:
@@ -208,21 +303,19 @@ if uploaded_files:
                 "text_corrected": "",
                 "sentiment_label": "error",
                 "sentiment_score": 0.0,
-                "rank": "Error"
+                "rank": "Error",
+                "topic": "غير محدد"
             })
         finally:
-            # Clean up temporary file
             if 'tmp_path' in locals():
                 try:
                     os.unlink(tmp_path)
                 except:
                     pass
 
-    # Clear progress indicators
     progress_bar.empty()
     status_text.empty()
     
-    # Show performance metrics
     end_time = time.time()
     total_time = end_time - start_time
     avg_time = total_time / len(uploaded_files) if uploaded_files else 0
@@ -231,52 +324,98 @@ if uploaded_files:
     if results:
         df = pd.DataFrame(results)
         
-        # Display results with tabs
+        # تطبيق الفلاتر
+        sentiment_map = {"سلبي": "negative", "إيجابي": "positive", "محايد": "neutral"}
+        selected_labels = [sentiment_map[s] for s in selected_sentiments]
+        
+        filtered_df = df[
+            df['sentiment_label'].isin(selected_labels) &
+            df['rank'].isin(selected_ranks)
+        ]
+        
+        # ========== المكالمات الحرجة ==========
+        critical_calls = df[(df['sentiment_label'] == 'negative') & (df['rank'].isin(['عالية', 'عالية جداً']))]
+        
+        if not critical_calls.empty:
+            st.warning(f"🚨 تنبيه: يوجد {len(critical_calls)} مكالمة سلبية عالية الأهمية تحتاج إلى متابعة عاجلة!")
+            
+            for _, row in critical_calls.iterrows():
+                with st.expander(f"المكالمة الحرجة: {row['call_id']}", expanded=False):
+                    st.markdown(f"**الموضوع:** {row['topic']}")
+                    st.markdown(f"**المستوى:** {row['rank']}")
+                    st.markdown(f"**نص المكالمة:**")
+                    st.write(row['text_corrected'])
+        
+        # ========== عرض النتائج ==========
         tab1, tab2, tab3 = st.tabs(["النتائج", "الرسوم البيانية", "تحميل البيانات"])
         
         with tab1:
             st.subheader("📋 ملخص النتائج")
-            st.dataframe(df[["call_id", "text_corrected", "sentiment_label", "sentiment_score", "rank"]], 
-                         use_container_width=True, height=400)
+            st.dataframe(
+                filtered_df[["call_id", "topic", "text_corrected", "sentiment_label", "sentiment_score", "rank"]], 
+                use_container_width=True,
+                height=400
+            )
             
-            # Detailed view
             st.subheader("🔍 التفاصيل الكاملة")
-            for idx, row in df.iterrows():
-                with st.expander(f"المكالمة: {row['call_id']} (المشاعر: {row['sentiment_label']})"):
+            for idx, row in filtered_df.iterrows():
+                with st.expander(f"المكالمة: {row['call_id']} (الموضوع: {row['topic']})", expanded=False):
+                    if row['sentiment_label'] == 'negative' and row['rank'] in ['عالية', 'عالية جداً']:
+                        st.warning("⚠️ مكالمة سلبية عالية الأهمية - تحتاج متابعة عاجلة!")
+                    
                     st.caption("النص الأصلي:")
                     st.write(row['text_raw'])
                     st.caption("النص المصحح:")
                     st.write(row['text_corrected'])
                     st.caption(f"تحليل المشاعر: {row['sentiment_label']} (ثقة: {row['sentiment_score']:.2f})")
                     st.caption(f"الأهمية: {row['rank']}")
+                    st.caption(f"الموضوع: {row['topic']}")
         
         with tab2:
             st.subheader("📊 التحليل البصري")
             
             col1, col2 = st.columns(2)
             with col1:
-                fig1 = px.pie(df, names="sentiment_label", title="توزيع المشاعر",
-                              color_discrete_map={'positive': 'green', 'negative': 'red', 'neutral': 'blue'})
+                fig1 = px.pie(
+                    filtered_df, 
+                    names="sentiment_label", 
+                    title="توزيع المشاعر",
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                )
                 st.plotly_chart(fig1, use_container_width=True)
                 
-                fig3 = px.histogram(df, x="sentiment_score", nbins=20, 
-                                   title="توزيع درجات المشاعر",
-                                   color="sentiment_label")
+                fig3 = px.bar(
+                    filtered_df, 
+                    x="topic", 
+                    color="sentiment_label",
+                    title="المواضيع حسب المشاعر",
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                )
                 st.plotly_chart(fig3, use_container_width=True)
                 
             with col2:
-                fig2 = px.bar(df, x="rank", color="rank", 
-                             title="تصنيف أهمية المكالمات",
-                             category_orders={"rank": ["عالية جداً", "عالية", "متوسطة", "إيجابية", "محايدة", "Error"]})
+                fig2 = px.bar(
+                    filtered_df, 
+                    x="rank", 
+                    color="sentiment_label",
+                    title="مستويات الأهمية",
+                    category_orders={"rank": ["عالية جداً", "عالية", "متوسطة", "إيجابية", "محايدة", "Error"]},
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                )
                 st.plotly_chart(fig2, use_container_width=True)
                 
-                fig4 = px.scatter(df, x="sentiment_score", y="rank", color="sentiment_label",
-                                title="العلاقة بين درجة المشاعر والأهمية")
+                fig4 = px.treemap(
+                    filtered_df, 
+                    path=['topic', 'sentiment_label'], 
+                    values='sentiment_score',
+                    title="توزيع المواضيع والمشاعر",
+                    color='sentiment_label',
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                )
                 st.plotly_chart(fig4, use_container_width=True)
         
         with tab3:
             st.subheader("⬇️ تحميل النتائج")
-            st.caption("يمكنك تنزيل النتائج كاملة بتنسيق JSON أو CSV")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -289,11 +428,10 @@ if uploaded_files:
             with col2:
                 st.download_button(
                     "📥 تحميل CSV", 
-                    df.to_csv(index=False).encode("utf-8-sig"), 
+                    filtered_df.to_csv(index=False).encode("utf-8-sig"), 
                     file_name="call_results.csv", 
                     mime="text/csv"
                 )
             
-            # Show sample JSON
             st.caption("معاينة JSON:")
             st.json(results[0] if len(results) > 0 else {})
