@@ -1,7 +1,9 @@
-streamlit
-transformers
-pandas
-plotly
-faster-whisper
-torch
-ctranslate2
+streamlit==1.32.0
+transformers==4.40.0
+torch==2.2.2
+pandas==2.2.1
+plotly==5.22.0
+faster-whisper==0.10.0
+ctranslate2==3.24.0
+arabic-reshaper==3.0.0
+python-bidi==0.4.2
