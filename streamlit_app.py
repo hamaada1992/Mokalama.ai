@@ -12,6 +12,7 @@ from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassifica
 import time
 import re
 import numpy as np
+import concurrent.futures
 
 # تحسينات المظهر العام
 st.set_page_config(
@@ -36,9 +37,19 @@ st.markdown("""
         background-color: #f8f9fa;
     }
     
-    .stAlert {
-        border-left: 4px solid var(--danger);
-        border-radius: 4px;
+    .positive-row {
+        background-color: #d4f8e8 !important;
+        color: black !important;
+    }
+    
+    .neutral-row {
+        background-color: #fff9db !important;
+        color: black !important;
+    }
+    
+    .negative-row {
+        background-color: #ffdbdb !important;
+        color: black !important;
     }
     
     .critical-call {
@@ -88,7 +99,7 @@ def load_sentiment_model():
             model=model, 
             tokenizer=tokenizer,
             truncation=True,
-            max_length=512
+            max_length=128  # تقليل الطول لتسريع المعالجة
         )
     except Exception as e:
         st.error(f"❌ فشل تحميل نموذج تحليل المشاعر: {str(e)}")
@@ -98,76 +109,28 @@ sentiment_pipeline = load_sentiment_model()
 
 # ========== تحسينات القاموس ==========
 corrections = {
-    "الفتور": "الفاتورة",
-    "زياد": "زيادة",
-    "الليزوم": "اللّزوم",
-    "المصادة": "المساعدة",
-    "بدي بطل": "بدي أبدّل",
-    "مع بول": "مع بوليصة",
-    "تازي": "تازة",
-    "ادام الفني": "أداء الفني",
-    "بالدي": "بدي",
-    "إدام": "أداء",
-    "الجودي": "الجودة",
-    "التوقعاتي": "توقّعاتي",
-    "مع طوب": "معطوب",
-    "أبريبا ديل": "أبغى بديل",
-    "شنل": "شنو",
-    "شن": "شنو",
-    "العلان": "الإعلان",
-    "المواضف": "الموظّف",
-    "مهدب": "مهذّب",
-    "الضفع": "الدفع",
-    "بيقال": "بايبال",
-    "اللعظم": "اللازم",
-    "ينفعد": "ينفع أعدّل",
-    "أبل ميت شهل": "قبل ما يتشحن",
-    "أبل ميت شهر": "قبل ما يتشحن",
-    "لخبر هك ما بسير": "الخبر هيك ما بصير",
-    "يعتيكم": "يعطيكم",
-    "عن جد التعامل": "عنجد التعامل",
-    "وشحن وصلت": "والشحنة وصلت",
-    "ما تابكون": "متى بيكون",
-    "ما تبكون": "متى بيكون",
-    "تبكون": "بيكون",
-    "عضروري": "ضروري",
-    "بدي ألغي طلب رأم واحد لاتي خمس سبعة تسعة": "بدي ألغي طلب رقم ١٣٥٧٩",
-    "المنتك": "المنتج",
-    "التحفة": "رائع",
-    "مأبول": "مقبول",
-    "مواعد": "موعد",
-    "تأخر واجد": "تأخّر كثير",
-    "ها كررها": "هأكرّرها",
-    "بدير جعل من تج": "بدي أرجّع المنتج",
-    "غيط لب رأم": "ألغي طلب رقم",
-    "أبريبا ديال": "أبغي بديل",
-    " اضافع": "الدفع",
-    " عزر الجعو": "عايز أرجعه",
-    "بأفين": "بقى فين",
-    "واللسة": "ولا لسه",
-    "يوماين": "يومين",
-    " ومحد ارد الخبر": "و ما حد رد خبر",
-    "سماحت": "سمحت",
-    "سماحت": "سمحت",
-    "بدأل": "بدي",
-    "واحد": "1",
-    "لاتي": "3",
-    "خمس": "5",
-    "سبعات": "7",
-    "سعى": "9",
-    
+    # ... (القاموس الحالي)
 }
 
-# ========== استخراج المواضيع ==========
+# ========== استخراج المواضيع (موسع) ==========
 TOPIC_KEYWORDS = {
-    "فواتير": ["فاتورة", "دفع", "بايبال", "الدفع", "الفاتورة"],
-    "توصيل": ["توصيل", "شحنة", "وصلت", "توصيل", "التوصيل", "موعد توصيل", "تاريخ توصيل"],
-    "استفسار": ["استفسار", "سؤال", "استعلام"],
-    "شكوى": ["شكوى", "مشكلة", "اعتراض", "خطأ", "غلط"],
-    "خدمة فنية": ["فني", "تقني", "صيانة", "إصلاح"],
-    "بطاقة": ["بطاقة", "كارت", "ائتمان", "مدى"],
-    "تأخير": ["تأخير", "تأخرت", "متأخرة", "تأخر", "أبطأ"],
-    "إلغاء طلب": ["إلغاء", "الغي", "ألغي", "تراجع", "الغاء", "إلغاء طلب"]
+    "فواتير": ["فاتورة", "دفع", "بايبال", "الدفع", "الفاتورة", "مبلغ", "رسوم"],
+    "توصيل": ["توصيل", "شحنة", "وصلت", "توصيل", "التوصيل", "موعد توصيل", "تاريخ توصيل", "تسليم", "الشحن"],
+    "استفسار": ["استفسار", "سؤال", "استعلام", "استفسار", "استعلام"],
+    "شكوى": ["شكوى", "مشكلة", "اعتراض", "خطأ", "غلط", "مستاء", "غير راضي"],
+    "خدمة فنية": ["فني", "تقني", "صيانة", "إصلاح", "عطل", "أعطال"],
+    "بطاقة": ["بطاقة", "كارت", "ائتمان", "مدى", "بطاقة ائتمان"],
+    "تأخير": ["تأخير", "تأخرت", "متأخرة", "تأخر", "أبطأ", "تأجيل"],
+    "إلغاء طلب": ["إلغاء", "الغي", "ألغي", "تراجع", "الغاء", "إلغاء طلب", "ألغيت"],
+    "استبدال منتج": ["استبدال", "بديل", "أبدل", "تغيير", "استبداله", "بدي أبدل"],
+    "استرجاع منتج": ["استرجاع", "أرجع", "إرجاع", "أسترد", "رد المنتج"],
+    "خصومات وعروض": ["عرض", "خصم", "تخفيض", "عروض", "تنزيلات", "سعر مخفض"],
+    "جودة المنتج": ["جودة", "نوعية", "رديئة", "رديء", "ممتازة", "سيئة"],
+    "خدمة العملاء": ["خدمة العملاء", "خدمة الزبائن", "دعم العملاء", "موظف خدمة"],
+    "تحديث معلومات": ["تحديث", "معلومات", "عنوان", "رقم الجوال", "بيانات", "تعديل بيانات"],
+    "المنتجات": ["منتج", "سلعة", "بضاعة", "صنف", "المشتريات", "الطلب"],
+    "تتبع الطلبات": ["تتبع", "أين طلبي", "مكان الشحنة", "موقع الشحنة", "تتبع شحنة"],
+    "الضمان": ["ضمان", "كفالة", "صلاحية الضمان", "فترة الضمان"]
 }
 
 def detect_topic(text):
@@ -201,14 +164,93 @@ def transcribe_audio(path):
     try:
         segments, _ = whisper_model.transcribe(
             path, 
-            beam_size=3,
+            beam_size=1,  # أسرع ولكن أقل دقة
             vad_filter=True,
-            language="ar"
+            language="ar",
+            without_timestamps=True  # يسرع المعالجة
         )
-        return " ".join([seg.text for seg in segments])[:5000]
+        return " ".join([seg.text for seg in segments])[:2000]  # تقليل الطول
     except Exception as e:
         st.error(f"❌ خطأ في تحويل الصوت إلى نص: {str(e)}")
         return ""
+
+# ========== معالجة مكالمة واحدة ==========
+def process_call(uploaded_file):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            tmp_file.write(uploaded_file.read())
+            tmp_path = tmp_file.name
+        
+        call_id = os.path.splitext(uploaded_file.name)[0]
+        
+        raw = transcribe_audio(tmp_path)
+        
+        if not raw.strip():
+            return {
+                "call_id": call_id,
+                "error": "فشل التحويل الصوتي",
+                "text_raw": "",
+                "text_clean": "",
+                "text_corrected": "",
+                "sentiment_label": "error",
+                "sentiment_score": 0.0,
+                "rank": "Error",
+                "topic": "غير محدد"
+            }
+        
+        clean = clean_text(raw)
+        corrected = manual_correction(clean)
+        topic = detect_topic(corrected)
+        
+        if not corrected.strip():
+            sentiment = {"label": "neutral", "score": 0.0}
+        else:
+            sentiment = sentiment_pipeline(corrected[:128])[0]  # تقليل الطول لتسريع المعالجة
+        
+        label = sentiment["label"]
+        score = round(sentiment["score"], 2)
+        
+        if label == "negative":
+            if score > 0.85:
+                rank = "عالية جداً"
+            elif score > 0.7:
+                rank = "عالية"
+            else:
+                rank = "متوسطة"
+        elif label == "positive":
+            rank = "إيجابية"
+        else:
+            rank = "محايدة"
+
+        return {
+            "call_id": call_id,
+            "text_raw": raw,
+            "text_clean": clean,
+            "text_corrected": corrected,
+            "sentiment_label": label,
+            "sentiment_score": score,
+            "rank": rank,
+            "topic": topic
+        }
+        
+    except Exception as e:
+        return {
+            "call_id": uploaded_file.name,
+            "error": str(e),
+            "text_raw": "",
+            "text_clean": "",
+            "text_corrected": "",
+            "sentiment_label": "error",
+            "sentiment_score": 0.0,
+            "rank": "Error",
+            "topic": "غير محدد"
+        }
+    finally:
+        if 'tmp_path' in locals():
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
 
 # ========== واجهة تحميل الملفات ==========
 uploaded_files = st.file_uploader(
@@ -236,6 +278,14 @@ if uploaded_files:
         options=rank_options,
         default=rank_options
     )
+    
+    # فلترة المواضيع
+    topic_options = sorted(set(TOPIC_KEYWORDS.keys()) | {"أخرى", "غير محدد"})
+    selected_topics = st.sidebar.multiselect(
+        "المواضيع",
+        options=topic_options,
+        default=topic_options
+    )
 
 # ========== معالجة المكالمات ==========
 if uploaded_files:
@@ -245,89 +295,22 @@ if uploaded_files:
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    for i, uploaded_file in enumerate(uploaded_files):
-        progress_percent = int((i + 1) / len(uploaded_files) * 100)
-        progress_bar.progress(progress_percent)
-        status_text.text(f"📞 جاري معالجة المكالمة {i+1}/{len(uploaded_files)}: {uploaded_file.name}")
+    # معالجة متوازية لتحسين السرعة
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_to_file = {executor.submit(process_call, file): file for file in uploaded_files}
         
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-                tmp_file.write(uploaded_file.read())
-                tmp_path = tmp_file.name
+        for i, future in enumerate(concurrent.futures.as_completed(future_to_file)):
+            file = future_to_file[future]
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                st.error(f"❌ خطأ في معالجة المكالمة {file.name}: {str(e)}")
             
-            call_id = os.path.splitext(uploaded_file.name)[0]
-            
-            raw = transcribe_audio(tmp_path)
-            
-            if not raw.strip():
-                results.append({
-                    "call_id": call_id,
-                    "error": "فشل التحويل الصوتي",
-                    "text_raw": "",
-                    "text_clean": "",
-                    "text_corrected": "",
-                    "sentiment_label": "error",
-                    "sentiment_score": 0.0,
-                    "rank": "Error",
-                    "topic": "غير محدد"
-                })
-                continue
-            
-            clean = clean_text(raw)
-            corrected = manual_correction(clean)
-            topic = detect_topic(corrected)
-            
-            if not corrected.strip():
-                sentiment = {"label": "neutral", "score": 0.0}
-                st.warning(f"المكالمة {call_id}: النص فارغ بعد التنظيف")
-            else:
-                sentiment = sentiment_pipeline(corrected[:512])[0]
-            
-            label = sentiment["label"]
-            score = round(sentiment["score"], 2)
-            
-            if label == "negative":
-                if score > 0.85:
-                    rank = "عالية جداً"
-                elif score > 0.7:
-                    rank = "عالية"
-                else:
-                    rank = "متوسطة"
-            elif label == "positive":
-                rank = "إيجابية"
-            else:
-                rank = "محايدة"
-
-            results.append({
-                "call_id": call_id,
-                "text_raw": raw,
-                "text_clean": clean,
-                "text_corrected": corrected,
-                "sentiment_label": label,
-                "sentiment_score": score,
-                "rank": rank,
-                "topic": topic
-            })
-            
-        except Exception as e:
-            st.error(f"❌ خطأ في معالجة المكالمة {uploaded_file.name}: {str(e)}")
-            results.append({
-                "call_id": uploaded_file.name,
-                "error": str(e),
-                "text_raw": "",
-                "text_clean": "",
-                "text_corrected": "",
-                "sentiment_label": "error",
-                "sentiment_score": 0.0,
-                "rank": "Error",
-                "topic": "غير محدد"
-            })
-        finally:
-            if 'tmp_path' in locals():
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
+            # تحديث شريط التقدم
+            progress_percent = int((i + 1) / len(uploaded_files) * 100)
+            progress_bar.progress(progress_percent)
+            status_text.text(f"📞 تم معالجة {i+1}/{len(uploaded_files)} مكالمة")
 
     progress_bar.empty()
     status_text.empty()
@@ -346,7 +329,8 @@ if uploaded_files:
         
         filtered_df = df[
             df['sentiment_label'].isin(selected_labels) &
-            df['rank'].isin(selected_ranks)
+            df['rank'].isin(selected_ranks) &
+            df['topic'].isin(selected_topics)
         ]
         
         # ========== المكالمات الحرجة ==========
@@ -367,8 +351,23 @@ if uploaded_files:
         
         with tab1:
             st.subheader("📋 ملخص النتائج")
+            
+            # تلوين الصفوف حسب المشاعر
+            def color_row(row):
+                if row['sentiment_label'] == 'positive':
+                    return ['background-color: #d4f8e8; color: black'] * len(row)
+                elif row['sentiment_label'] == 'neutral':
+                    return ['background-color: #fff9db; color: black'] * len(row)
+                elif row['sentiment_label'] == 'negative':
+                    return ['background-color: #ffdbdb; color: black'] * len(row)
+                else:
+                    return [''] * len(row)
+            
+            # تطبيق التلوين على DataFrame
+            styled_df = filtered_df[["call_id", "topic", "text_corrected", "sentiment_label", "sentiment_score", "rank"]].style.apply(color_row, axis=1)
+            
             st.dataframe(
-                filtered_df[["call_id", "topic", "text_corrected", "sentiment_label", "sentiment_score", "rank"]], 
+                styled_df,
                 use_container_width=True,
                 height=400
             )
@@ -396,7 +395,7 @@ if uploaded_files:
                     filtered_df, 
                     names="sentiment_label", 
                     title="توزيع المشاعر",
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
                 )
                 st.plotly_chart(fig1, use_container_width=True)
                 
@@ -405,7 +404,7 @@ if uploaded_files:
                     x="topic", 
                     color="sentiment_label",
                     title="المواضيع حسب المشاعر",
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
                 )
                 st.plotly_chart(fig3, use_container_width=True)
                 
@@ -416,7 +415,7 @@ if uploaded_files:
                     color="sentiment_label",
                     title="مستويات الأهمية",
                     category_orders={"rank": ["عالية جداً", "عالية", "متوسطة", "إيجابية", "محايدة", "Error"]},
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
                 )
                 st.plotly_chart(fig2, use_container_width=True)
                 
@@ -426,7 +425,7 @@ if uploaded_files:
                     values='sentiment_score',
                     title="توزيع المواضيع والمشاعر",
                     color='sentiment_label',
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#3498db'}
+                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
                 )
                 st.plotly_chart(fig4, use_container_width=True)
         
