@@ -43,7 +43,8 @@ def manual_correction(text):
 
 def transcribe_audio(path):
     segments, _ = whisper_model.transcribe(path)
-    return " ".join([seg.text for seg in segments])
+    # Handle long audio by splitting into chunks
+    return " ".join([seg.text for seg in segments])[:10000]  # Limit to 10k characters
 
 uploaded_files = st.file_uploader("📂 ارفع ملفات صوتية", type=["wav", "mp3", "flac"], accept_multiple_files=True)
 
