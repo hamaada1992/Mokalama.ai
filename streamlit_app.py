@@ -12,7 +12,7 @@ st.title("🎧 تحليل مكالمات الدعم الفني وتحليل ال
 
 @st.cache_resource
 def load_whisper_model():
-    return WhisperModel("tiny", device="cpu")
+    return WhisperModel("base", device="cpu")
 
 whisper_model = load_whisper_model()
 
@@ -42,7 +42,7 @@ def manual_correction(text):
     return text
 
 def transcribe_audio(path):
-    segments, _ = whisper_model.transcribe(path)
+    segments, _ = whisper_model.transcribe(path, language="ar")
     return " ".join([seg.text for seg in segments])
 
 uploaded_files = st.file_uploader("📂 ارفع ملفات صوتية", type=["wav", "mp3", "flac"], accept_multiple_files=True)
