@@ -3,4 +3,4 @@ transformers
 pandas
 plotly
 faster-whisper
-torch
+ctranslate2==3.24.0
