@@ -1,9 +1,9 @@
 streamlit
 pandas
 plotly
-faster-whisper
-transformers
-torch
+faster-whisper==0.10.0
+transformers==4.40.1
+torch==2.1.2
 sentencepiece
 protobuf
 ffmpeg-python
