@@ -3,4 +3,5 @@ transformers
 pandas
 plotly
 faster-whisper
+torch
 ctranslate2
