@@ -104,7 +104,7 @@ def load_whisper_model(size):
         st.error(f"❌ فشل تحميل نموذج الصوت: {str(e)}")
         st.stop()
 
-whisper_model = load_whis per_model(model_size)
+whisper_model = load_whisper_model(model_size)
 
 @st.cache_resource(show_spinner=False)
 def load_sentiment_model():
@@ -271,11 +271,12 @@ def process_call(uploaded_file):
         topic = detect_topic(corrected)
         
         if not corrected.strip():
-            sentiment = {"label": "neutral", "score": 0.0}
+            final_label = "neutral"
+            final_score = 0.0
         else:
             # تقسيم النص إلى أجزاء صغيرة لتجنب أخطاء طول السياق
             max_chunk_size = 128
-            chunks = [corrected[i:i+max_chunk_size] for i in range(0, len(corrected), max_chunk_size]
+            chunks = [corrected[i:i+max_chunk_size] for i in range(0, len(corrected), max_chunk_size)]
             sentiments = sentiment_pipeline(chunks)
             
             # حساب متوسط النتائج
@@ -292,9 +293,6 @@ def process_call(uploaded_file):
             
             final_label = max(label_counts, key=label_counts.get)
             final_score = round(sum(scores) / len(scores), 2)
-        else:
-            final_label = "neutral"
-            final_score = 0.0
         
         if final_label == "negative":
             if final_score > 0.85:
@@ -382,7 +380,8 @@ if uploaded_files:
     status_text = st.empty()
 
     # معالجة متوازية لتحسين السرعة
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(uploaded_files))) as executor:
+    max_workers = min(4, len(uploaded_files))  # لا تزيد عن 4 عمال
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_file = {executor.submit(process_call, file): file for file in uploaded_files}
         
         for i, future in enumerate(concurrent.futures.as_completed(future_to_file)):
