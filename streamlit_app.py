@@ -11,7 +11,6 @@ from faster_whisper import WhisperModel
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import time
 import re
-import numpy as np
 import concurrent.futures
 
 # تحسينات المظهر العام
@@ -73,20 +72,39 @@ st.title("📞 تحليل مكالمات الدعم الفني وتحليل ال
 
 # ========== إعدادات النموذج ==========
 st.sidebar.header("⚙️ إعدادات النموذج")
-model_size = st.sidebar.radio(
+
+# جميع أحجام النماذج الأساسية فقط
+MODEL_SIZES = ["tiny", "base", "small", "medium", "large"]
+
+# وصف النماذج
+MODEL_DESCRIPTIONS = {
+    "tiny": "الأسرع - دقة منخفضة (40-50%)",
+    "base": "متوسط السرعة - دقة معقولة (60-70%)",
+    "small": "جيد - توازن بين السرعة والدقة (70-80%)",
+    "medium": "متقدم - دقة عالية (80-90%)",
+    "large": "الأفضل - أعلى دقة (90%+)"
+}
+
+# اختيار حجم النموذج
+model_size = st.sidebar.selectbox(
     "حجم نموذج الصوت",
-    ["tiny", "base"], 
-    index=1,
-    help="اختر tiny لتحليل أسرع أو base لدقة أعلى"
+    options=MODEL_SIZES,
+    index=1,  # تحديد "base" كإفتراضي
+    format_func=lambda x: f"{x} - {MODEL_DESCRIPTIONS.get(x, '')}",
+    help="اختر نموذجاً مناسباً. النماذج الأكبر حجماً أكثر دقة ولكنها أبطأ"
 )
 
 # ========== تحميل النماذج ==========
 @st.cache_resource(show_spinner=False)
 def load_whisper_model(size):
     st.info(f"⏳ جاري تحميل نموذج الصوت ({size})...")
-    return WhisperModel(size, device="cpu", compute_type="int8")
+    try:
+        return WhisperModel(size, device="cpu", compute_type="int8")
+    except Exception as e:
+        st.error(f"❌ فشل تحميل نموذج الصوت: {str(e)}")
+        st.stop()
 
-whisper_model = load_whisper_model(model_size)
+whisper_model = load_whis per_model(model_size)
 
 @st.cache_resource(show_spinner=False)
 def load_sentiment_model():
@@ -99,7 +117,7 @@ def load_sentiment_model():
             model=model, 
             tokenizer=tokenizer,
             truncation=True,
-            max_length=128  # تقليل الطول لتسريع المعالجة
+            max_length=128
         )
     except Exception as e:
         st.error(f"❌ فشل تحميل نموذج تحليل المشاعر: {str(e)}")
@@ -109,7 +127,6 @@ sentiment_pipeline = load_sentiment_model()
 
 # ========== تحسينات القاموس ==========
 corrections = {
-
     "الفتور": "الفاتورة",
     "زياد": "زيادة",
     "الليزوم": "اللّزوم",
@@ -153,7 +170,7 @@ corrections = {
     "بدير جعل من تج": "بدي أرجّع المنتج",
     "غيط لب رأم": "ألغي طلب رقم",
     "أصوى": "أسوء",
-     "أخذ متعملاء": "خدمة عملاء",
+    "أخذ متعملاء": "خدمة عملاء",
     "الزباء": "الزبائن",
     "خدمت":"خدمة",
     "مرحضة":"مرحبا"
@@ -199,10 +216,14 @@ def detect_topic(text):
 
 # ========== وظائف مساعدة ==========
 def clean_text(text):
+    if not text:
+        return ""
     text = re.sub(r"[^\u0600-\u06FF\s]", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 def manual_correction(text):
+    if not text:
+        return ""
     for wrong, right in corrections.items():
         text = text.replace(wrong, right)
     return text
@@ -211,12 +232,12 @@ def transcribe_audio(path):
     try:
         segments, _ = whisper_model.transcribe(
             path, 
-            beam_size=1,  # أسرع ولكن أقل دقة
+            beam_size=1,
             vad_filter=True,
             language="ar",
-            without_timestamps=True  # يسرع المعالجة
+            without_timestamps=True
         )
-        return " ".join([seg.text for seg in segments])[:2000]  # تقليل الطول
+        return " ".join([seg.text for seg in segments])
     except Exception as e:
         st.error(f"❌ خطأ في تحويل الصوت إلى نص: {str(e)}")
         return ""
@@ -252,19 +273,37 @@ def process_call(uploaded_file):
         if not corrected.strip():
             sentiment = {"label": "neutral", "score": 0.0}
         else:
-            sentiment = sentiment_pipeline(corrected[:128])[0]  # تقليل الطول لتسريع المعالجة
+            # تقسيم النص إلى أجزاء صغيرة لتجنب أخطاء طول السياق
+            max_chunk_size = 128
+            chunks = [corrected[i:i+max_chunk_size] for i in range(0, len(corrected), max_chunk_size]
+            sentiments = sentiment_pipeline(chunks)
+            
+            # حساب متوسط النتائج
+            scores = []
+            labels = []
+            for s in sentiments:
+                labels.append(s['label'])
+                scores.append(s['score'])
+            
+            # تحديد التصنيف النهائي بناءً على المتوسط
+            label_counts = {"positive": 0, "negative": 0, "neutral": 0}
+            for l in labels:
+                label_counts[l] += 1
+            
+            final_label = max(label_counts, key=label_counts.get)
+            final_score = round(sum(scores) / len(scores), 2)
+        else:
+            final_label = "neutral"
+            final_score = 0.0
         
-        label = sentiment["label"]
-        score = round(sentiment["score"], 2)
-        
-        if label == "negative":
-            if score > 0.85:
+        if final_label == "negative":
+            if final_score > 0.85:
                 rank = "عالية جداً"
-            elif score > 0.7:
+            elif final_score > 0.7:
                 rank = "عالية"
             else:
                 rank = "متوسطة"
-        elif label == "positive":
+        elif final_label == "positive":
             rank = "إيجابية"
         else:
             rank = "محايدة"
@@ -274,8 +313,8 @@ def process_call(uploaded_file):
             "text_raw": raw,
             "text_clean": clean,
             "text_corrected": corrected,
-            "sentiment_label": label,
-            "sentiment_score": score,
+            "sentiment_label": final_label,
+            "sentiment_score": final_score,
             "rank": rank,
             "topic": topic
         }
@@ -343,7 +382,7 @@ if uploaded_files:
     status_text = st.empty()
 
     # معالجة متوازية لتحسين السرعة
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(uploaded_files))) as executor:
         future_to_file = {executor.submit(process_call, file): file for file in uploaded_files}
         
         for i, future in enumerate(concurrent.futures.as_completed(future_to_file)):
@@ -394,106 +433,121 @@ if uploaded_files:
                     st.write(row['text_corrected'])
         
         # ========== عرض النتائج ==========
-        tab1, tab2, tab3 = st.tabs(["النتائج", "الرسوم البيانية", "تحميل البيانات"])
-        
-        with tab1:
-            st.subheader("📋 ملخص النتائج")
+        if filtered_df.empty:
+            st.warning("⚠️ لا توجد نتائج تطابق الفلاتر المحددة")
+        else:
+            tab1, tab2, tab3 = st.tabs(["النتائج", "الرسوم البيانية", "تحميل البيانات"])
             
-            # تلوين الصفوف حسب المشاعر
-            def color_row(row):
-                if row['sentiment_label'] == 'positive':
-                    return ['background-color: #d4f8e8; color: black'] * len(row)
-                elif row['sentiment_label'] == 'neutral':
-                    return ['background-color: #fff9db; color: black'] * len(row)
-                elif row['sentiment_label'] == 'negative':
-                    return ['background-color: #ffdbdb; color: black'] * len(row)
-                else:
-                    return [''] * len(row)
+            with tab1:
+                st.subheader("📋 ملخص النتائج")
+                
+                # تلوين الصفوف حسب المشاعر
+                def color_row(row):
+                    if row['sentiment_label'] == 'positive':
+                        return ['background-color: #d4f8e8'] * len(row)
+                    elif row['sentiment_label'] == 'neutral':
+                        return ['background-color: #fff9db'] * len(row)
+                    elif row['sentiment_label'] == 'negative':
+                        return ['background-color: #ffdbdb'] * len(row)
+                    else:
+                        return [''] * len(row)
+                
+                # تطبيق التلوين على DataFrame
+                display_df = filtered_df[["call_id", "topic", "sentiment_label", "sentiment_score", "rank"]].copy()
+                styled_df = display_df.style.apply(color_row, axis=1)
+                
+                st.dataframe(
+                    styled_df,
+                    use_container_width=True,
+                    height=400
+                )
+                
+                st.subheader("🔍 التفاصيل الكاملة")
+                for idx, row in filtered_df.iterrows():
+                    with st.expander(f"المكالمة: {row['call_id']} (الموضوع: {row['topic']})", expanded=False):
+                        if row['sentiment_label'] == 'negative' and row['rank'] in ['عالية', 'عالية جداً']:
+                            st.warning("⚠️ مكالمة سلبية عالية الأهمية - تحتاج متابعة عاجلة!")
+                        
+                        st.caption("النص الأصلي:")
+                        st.write(row['text_raw'])
+                        st.caption("النص المصحح:")
+                        st.write(row['text_corrected'])
+                        st.caption(f"تحليل المشاعر: {row['sentiment_label']} (ثقة: {row['sentiment_score']:.2f})")
+                        st.caption(f"الأهمية: {row['rank']}")
+                        st.caption(f"الموضوع: {row['topic']}")
             
-            # تطبيق التلوين على DataFrame
-            styled_df = filtered_df[["call_id", "topic", "text_corrected", "sentiment_label", "sentiment_score", "rank"]].style.apply(color_row, axis=1)
-            
-            st.dataframe(
-                styled_df,
-                use_container_width=True,
-                height=400
-            )
-            
-            st.subheader("🔍 التفاصيل الكاملة")
-            for idx, row in filtered_df.iterrows():
-                with st.expander(f"المكالمة: {row['call_id']} (الموضوع: {row['topic']})", expanded=False):
-                    if row['sentiment_label'] == 'negative' and row['rank'] in ['عالية', 'عالية جداً']:
-                        st.warning("⚠️ مكالمة سلبية عالية الأهمية - تحتاج متابعة عاجلة!")
+            with tab2:
+                st.subheader("📊 التحليل البصري")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    # توزيع المشاعر
+                    sentiment_counts = filtered_df['sentiment_label'].value_counts().reset_index()
+                    sentiment_counts.columns = ['sentiment', 'count']
+                    fig1 = px.pie(
+                        sentiment_counts, 
+                        names='sentiment', 
+                        values='count',
+                        title="توزيع المشاعر",
+                        color='sentiment',
+                        color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
+                    )
+                    st.plotly_chart(fig1, use_container_width=True)
                     
-                    st.caption("النص الأصلي:")
-                    st.write(row['text_raw'])
-                    st.caption("النص المصحح:")
-                    st.write(row['text_corrected'])
-                    st.caption(f"تحليل المشاعر: {row['sentiment_label']} (ثقة: {row['sentiment_score']:.2f})")
-                    st.caption(f"الأهمية: {row['rank']}")
-                    st.caption(f"الموضوع: {row['topic']}")
-        
-        with tab2:
-            st.subheader("📊 التحليل البصري")
+                    # المواضيع حسب المشاعر
+                    if not filtered_df.empty:
+                        fig3 = px.bar(
+                            filtered_df, 
+                            x="topic", 
+                            color="sentiment_label",
+                            title="المواضيع حسب المشاعر",
+                            color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
+                        )
+                        st.plotly_chart(fig3, use_container_width=True)
+                    
+                with col2:
+                    # مستويات الأهمية
+                    if not filtered_df.empty:
+                        fig2 = px.bar(
+                            filtered_df, 
+                            x="rank", 
+                            color="sentiment_label",
+                            title="مستويات الأهمية",
+                            category_orders={"rank": ["عالية جداً", "عالية", "متوسطة", "إيجابية", "محايدة"]},
+                            color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
+                        )
+                        st.plotly_chart(fig2, use_container_width=True)
+                    
+                    # توزيع المواضيع والمشاعر
+                    if not filtered_df.empty:
+                        fig4 = px.treemap(
+                            filtered_df, 
+                            path=['topic', 'sentiment_label'], 
+                            values='sentiment_score',
+                            title="توزيع المواضيع والمشاعر",
+                            color='sentiment_label',
+                            color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
+                        )
+                        st.plotly_chart(fig4, use_container_width=True)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                fig1 = px.pie(
-                    filtered_df, 
-                    names="sentiment_label", 
-                    title="توزيع المشاعر",
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
-                )
-                st.plotly_chart(fig1, use_container_width=True)
+            with tab3:
+                st.subheader("⬇️ تحميل النتائج")
                 
-                fig3 = px.bar(
-                    filtered_df, 
-                    x="topic", 
-                    color="sentiment_label",
-                    title="المواضيع حسب المشاعر",
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
-                )
-                st.plotly_chart(fig3, use_container_width=True)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        "📥 تحميل JSON", 
+                        json.dumps(results, ensure_ascii=False, indent=2), 
+                        file_name="call_results.json", 
+                        mime="application/json"
+                    )
+                with col2:
+                    st.download_button(
+                        "📥 تحميل CSV", 
+                        filtered_df.to_csv(index=False).encode("utf-8-sig"), 
+                        file_name="call_results.csv", 
+                        mime="text/csv"
+                    )
                 
-            with col2:
-                fig2 = px.bar(
-                    filtered_df, 
-                    x="rank", 
-                    color="sentiment_label",
-                    title="مستويات الأهمية",
-                    category_orders={"rank": ["عالية جداً", "عالية", "متوسطة", "إيجابية", "محايدة", "Error"]},
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-                
-                fig4 = px.treemap(
-                    filtered_df, 
-                    path=['topic', 'sentiment_label'], 
-                    values='sentiment_score',
-                    title="توزيع المواضيع والمشاعر",
-                    color='sentiment_label',
-                    color_discrete_map={'positive': '#2ecc71', 'negative': '#e74c3c', 'neutral': '#f39c12'}
-                )
-                st.plotly_chart(fig4, use_container_width=True)
-        
-        with tab3:
-            st.subheader("⬇️ تحميل النتائج")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.download_button(
-                    "📥 تحميل JSON", 
-                    json.dumps(results, ensure_ascii=False, indent=2), 
-                    file_name="call_results.json", 
-                    mime="application/json"
-                )
-            with col2:
-                st.download_button(
-                    "📥 تحميل CSV", 
-                    filtered_df.to_csv(index=False).encode("utf-8-sig"), 
-                    file_name="call_results.csv", 
-                    mime="text/csv"
-                )
-            
-            st.caption("معاينة JSON:")
-            st.json(results[0] if len(results) > 0 else {})
+                st.caption("معاينة JSON:")
+                st.json(results[0] if len(results) > 0 else {})
