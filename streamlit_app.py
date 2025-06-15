@@ -36,6 +36,27 @@ st.markdown("""
         background-color: #f8f9fa;
     }
     
+    /* إصلاح شامل للون الخط في الجداول */
+    .stDataFrame * {
+        color: black !important;
+    }
+    
+    .stDataFrame th, .stDataFrame td {
+        color: black !important;
+        background-color: transparent !important;
+    }
+    
+    .stDataFrame table {
+        color: black !important;
+        font-family: Arial, sans-serif !important;
+        font-size: 14px !important;
+    }
+    
+    .stDataFrame th {
+        font-weight: bold !important;
+        background-color: #f0f0f0 !important;
+    }
+    
     .positive-row {
         background-color: #d4f8e8 !important;
         color: black !important;
@@ -64,15 +85,6 @@ st.markdown("""
         border-bottom: 2px solid var(--primary);
         padding-bottom: 10px;
         margin-bottom: 20px;
-    }
-    
-    /* إصلاح لون الخط في الجدول */
-    .stDataFrame td {
-        color: black !important;
-    }
-    
-    .stDataFrame th {
-        color: black !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -451,19 +463,20 @@ if uploaded_files:
                 
                 # تلوين الصفوف حسب المشاعر
                 def color_row(row):
+                    styles = [''] * len(row)
                     if row['sentiment_label'] == 'positive':
-                        return ['background-color: #d4f8e8; color: black !important;'] * len(row)
+                        styles = ['background-color: #d4f8e8;'] * len(row)
                     elif row['sentiment_label'] == 'neutral':
-                        return ['background-color: #fff9db; color: black !important;'] * len(row)
+                        styles = ['background-color: #fff9db;'] * len(row)
                     elif row['sentiment_label'] == 'negative':
-                        return ['background-color: #ffdbdb; color: black !important;'] * len(row)
-                    else:
-                        return ['background-color: white; color: black !important;'] * len(row)
+                        styles = ['background-color: #ffdbdb;'] * len(row)
+                    return styles
                 
                 # تطبيق التلوين على DataFrame
                 display_df = filtered_df[["call_id", "topic", "sentiment_label", "sentiment_score", "rank"]].copy()
                 styled_df = display_df.style.apply(color_row, axis=1)
                 
+                # عرض الجدول مع تخصيصات إضافية
                 st.dataframe(
                     styled_df,
                     use_container_width=True,
