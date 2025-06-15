@@ -1,6 +1,7 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "poll"
+os.environ["PYTHONWARNINGS"] = "ignore"  # إضافة لتجاهل بعض التحذيرات
 
 import streamlit as st
 import tempfile
@@ -12,6 +13,13 @@ from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassifica
 import time
 import re
 import concurrent.futures
+import asyncio  # لإصلاح مشكلة event loop
+
+# حل لمشكلة event loop
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
 # تحسينات المظهر العام
 st.set_page_config(
@@ -32,12 +40,8 @@ st.markdown("""
         --dark: #2c3e50;
     }
     
-    .st-emotion-cache-1y4p8pa {
-        background-color: #f8f9fa;
-    }
-    
-    /* إصلاح شامل للون الخط في الجداول */
-    .stDataFrame * {
+    /* حل جذري لمشكلة لون الخط */
+    body, html, .stApp, .stDataFrame, .stDataFrame * {
         color: black !important;
     }
     
@@ -465,18 +469,26 @@ if uploaded_files:
                 def color_row(row):
                     styles = [''] * len(row)
                     if row['sentiment_label'] == 'positive':
-                        styles = ['background-color: #d4f8e8;'] * len(row)
+                        styles = ['background-color: #d4f8e8; color: black !important;'] * len(row)
                     elif row['sentiment_label'] == 'neutral':
-                        styles = ['background-color: #fff9db;'] * len(row)
+                        styles = ['background-color: #fff9db; color: black !important;'] * len(row)
                     elif row['sentiment_label'] == 'negative':
-                        styles = ['background-color: #ffdbdb;'] * len(row)
+                        styles = ['background-color: #ffdbdb; color: black !important;'] * len(row)
                     return styles
                 
                 # تطبيق التلوين على DataFrame
                 display_df = filtered_df[["call_id", "topic", "sentiment_label", "sentiment_score", "rank"]].copy()
                 styled_df = display_df.style.apply(color_row, axis=1)
                 
-                # عرض الجدول مع تخصيصات إضافية
+                # حل بديل لعرض الجدول بلون خط أسود
+                st.markdown("""
+                <style>
+                    div[data-testid="stDataFrame"] * {
+                        color: black !important;
+                    }
+                </style>
+                """, unsafe_allow_html=True)
+                
                 st.dataframe(
                     styled_df,
                     use_container_width=True,
