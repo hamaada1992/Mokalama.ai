@@ -1,7 +1,6 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "poll"
-os.environ["PYTHONWARNINGS"] = "ignore"  # إضافة لتجاهل بعض التحذيرات
 
 import streamlit as st
 import tempfile
@@ -13,7 +12,7 @@ from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassifica
 import time
 import re
 import concurrent.futures
-import asyncio  # لإصلاح مشكلة event loop
+import asyncio
 
 # حل لمشكلة event loop
 try:
@@ -40,8 +39,13 @@ st.markdown("""
         --dark: #2c3e50;
     }
     
-    /* حل جذري لمشكلة لون الخط */
-    body, html, .stApp, .stDataFrame, .stDataFrame * {
+    /* استعادة الألوان الأصلية للنصوص */
+    body, .stApp, .stMarkdown, .stText, .stSelectbox, .stMultiselect, .stRadio, .stButton, .stAlert {
+        color: inherit !important;
+    }
+    
+    /* تنسيقات خاصة بالجدول فقط */
+    .stDataFrame {
         color: black !important;
     }
     
@@ -59,8 +63,10 @@ st.markdown("""
     .stDataFrame th {
         font-weight: bold !important;
         background-color: #f0f0f0 !important;
+        color: black !important;
     }
     
+    /* تلوين الصفوف */
     .positive-row {
         background-color: #d4f8e8 !important;
         color: black !important;
@@ -465,6 +471,23 @@ if uploaded_files:
             with tab1:
                 st.subheader("📋 ملخص النتائج")
                 
+                # حل نهائي لمشكلة لون الخط في الجدول
+                st.markdown("""
+                <style>
+                    div[data-testid="stDataFrame"] table {
+                        color: black !important;
+                    }
+                    
+                    div[data-testid="stDataFrame"] th {
+                        color: black !important;
+                    }
+                    
+                    div[data-testid="stDataFrame"] td {
+                        color: black !important;
+                    }
+                </style>
+                """, unsafe_allow_html=True)
+                
                 # تلوين الصفوف حسب المشاعر
                 def color_row(row):
                     styles = [''] * len(row)
@@ -479,15 +502,6 @@ if uploaded_files:
                 # تطبيق التلوين على DataFrame
                 display_df = filtered_df[["call_id", "topic", "sentiment_label", "sentiment_score", "rank"]].copy()
                 styled_df = display_df.style.apply(color_row, axis=1)
-                
-                # حل بديل لعرض الجدول بلون خط أسود
-                st.markdown("""
-                <style>
-                    div[data-testid="stDataFrame"] * {
-                        color: black !important;
-                    }
-                </style>
-                """, unsafe_allow_html=True)
                 
                 st.dataframe(
                     styled_df,
